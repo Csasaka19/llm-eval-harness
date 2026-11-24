@@ -19,7 +19,7 @@ faithfulness, tool-call correctness, latency and cost per request.
 
 - [x] 1. Project scaffold (packaging, lint, types, tests, CI)
 - [x] 2. Core types and runner (cases, results, system adapter, JSONL datasets)
-- [ ] 3. Retrieval metrics (recall@k, precision@k, MRR, nDCG)
+- [x] 3. Retrieval metrics (recall@k, precision@k, MRR, nDCG)
 - [ ] 4. Latency and cost tracking (percentiles, token-based cost)
 - [ ] 5. Tool-call correctness (name, arguments, sequence)
 - [ ] 6. Answer faithfulness (claim-level judge + human-agreement check)
@@ -30,8 +30,11 @@ faithfulness, tool-call correctness, latency and cost per request.
 ## Usage
 
 ```bash
-llm-eval run --dataset examples/smoke.jsonl --system echo
-# -> runs/<utc-timestamp>/{manifest.json, results.jsonl}
+llm-eval run --dataset examples/smoke.jsonl --system echo --out runs/demo
+# -> runs/demo/{manifest.json, results.jsonl}
+
+llm-eval score runs/demo --k 1 5
+# -> prints a scorecard and writes runs/demo/scores.json
 ```
 
 `--system` takes a builtin alias (`echo`) or any `package.module:ClassName` whose class
@@ -54,6 +57,25 @@ an exact dataset version.
 Only `id` and `input` are required. A case counts toward a metric only if it has that
 metric's gold label. Unknown keys, duplicate ids, and type errors are rejected with the
 line number.
+
+## Metrics
+
+### Retrieval
+
+Computed for every case with `expected_doc_ids`, using binary relevance:
+`recall@k`, `precision@k`, `hit_rate@k`, `ndcg@k`, and `mrr`.
+
+Conventions, since libraries disagree:
+
+- Retrieved IDs are **de-duplicated** (first occurrence kept) before scoring, so
+  repeating a relevant document can't inflate precision.
+- `precision@k` divides by **k**, not by the number of documents returned.
+- nDCG uses gain 1 and discount `1/log2(rank+1)`. The ideal ranking puts `min(k, |relevant|)`
+  relevant docs first.
+- **Errored cases score 0** and stay in the denominator. The scorecard reports `n` and
+  how many cases errored.
+- `score` refuses to run if the dataset's SHA-256 differs from the one in the run
+  manifest, or if result and dataset case IDs don't match exactly.
 
 ## Development
 
