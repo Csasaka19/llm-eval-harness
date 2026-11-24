@@ -20,7 +20,7 @@ faithfulness, tool-call correctness, latency and cost per request.
 - [x] 1. Project scaffold (packaging, lint, types, tests, CI)
 - [x] 2. Core types and runner (cases, results, system adapter, JSONL datasets)
 - [x] 3. Retrieval metrics (recall@k, precision@k, MRR, nDCG)
-- [ ] 4. Latency and cost tracking (percentiles, token-based cost)
+- [x] 4. Latency and cost tracking (percentiles, token-based cost)
 - [ ] 5. Tool-call correctness (name, arguments, sequence)
 - [ ] 6. Answer faithfulness (claim-level judge + human-agreement check)
 - [ ] 7. Sample datasets and a baseline system
@@ -33,7 +33,7 @@ faithfulness, tool-call correctness, latency and cost per request.
 llm-eval run --dataset examples/smoke.jsonl --system echo --out runs/demo
 # -> runs/demo/{manifest.json, results.jsonl}
 
-llm-eval score runs/demo --k 1 5
+llm-eval score runs/demo --k 1 5 --pricing examples/pricing.example.toml
 # -> prints a scorecard and writes runs/demo/scores.json
 ```
 
@@ -76,6 +76,26 @@ Conventions, since libraries disagree:
   how many cases errored.
 - `score` refuses to run if the dataset's SHA-256 differs from the one in the run
   manifest, or if result and dataset case IDs don't match exactly.
+
+### Latency
+
+Wall-clock time around each `System.run` call, in milliseconds. It covers **all
+requests, including errors**, because timeouts are part of what users experience.
+Percentiles use linear interpolation (same as numpy's default). A tail percentile is
+**withheld** (shown as `n/a` with a note) unless `n >= 1/(1-p)`, meaning 20 requests
+for p95 and 100 for p99. Below that, "p99" is just the maximum under another name.
+
+### Cost per request
+
+The harness ships **no prices**. Pass a TOML price table with `--pricing` (see
+`examples/pricing.example.toml`). It must include an `as_of` date and a `source`, and both
+are printed with every cost figure.
+
+- Cost = `input_tokens x input price + output_tokens x output price` (per 1M tokens),
+  using the `model` and `usage` the system reports.
+- A request with no usage, or with a model missing from the table, is **unpriced**. It's
+  counted separately and never treated as free. Missing models are listed by name.
+- Errored requests that report usage are priced, because failed calls still cost money.
 
 ## Development
 

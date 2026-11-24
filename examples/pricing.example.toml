@@ -1,0 +1,18 @@
+# Example price table for `llm-eval score --pricing`.
+#
+# PLACEHOLDER VALUES. These are not real prices for any provider. Copy this file, fill in
+# the current prices for the models you evaluate, and update `as_of` and `source` so the
+# report records exactly which prices were used.
+
+as_of = "2026-11-24"
+source = "placeholder: not real prices"
+currency = "USD"
+
+# Model ids must match `SystemResponse.model` exactly.
+[models."mock-small"]
+input_per_mtok = 0.50   # price per 1M input tokens
+output_per_mtok = 2.00  # price per 1M output tokens
+
+[models."mock-large"]
+input_per_mtok = 5.00
+output_per_mtok = 20.00

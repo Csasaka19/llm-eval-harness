@@ -7,6 +7,8 @@ Honesty rules applied here:
 * A case without gold labels for a metric family is excluded from that family, and the
   number of included cases is always reported next to the mean.
 * Results and dataset must cover exactly the same case ids.
+* Latency covers every request, errored or not: a timeout is part of what users see.
+* Cost is ``None`` (unknown) unless the model and token usage are known and priced.
 """
 
 from __future__ import annotations
@@ -14,7 +16,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
+from llm_eval.metrics.cost import CostSummary, summarize_cost
+from llm_eval.metrics.latency import LatencySummary, summarize_latency
 from llm_eval.metrics.retrieval import retrieval_scores
+from llm_eval.pricing import PriceTable
 from llm_eval.types import CaseResult, EvalCase
 
 DEFAULT_KS: tuple[int, ...] = (1, 3, 5, 10)
@@ -28,6 +33,8 @@ class ScoringError(ValueError):
 class CaseScores:
     case_id: str
     errored: bool
+    latency_ms: float
+    cost: float | None = None
     retrieval: dict[str, float] | None = None
 
 
@@ -44,10 +51,16 @@ class Aggregate:
 class Scorecard:
     cases: tuple[CaseScores, ...]
     retrieval: dict[str, Aggregate] = field(default_factory=dict)
+    latency: LatencySummary | None = None
+    cost: CostSummary | None = None
 
 
 def score_run(
-    cases: Sequence[EvalCase], results: Sequence[CaseResult], ks: Sequence[int] = DEFAULT_KS
+    cases: Sequence[EvalCase],
+    results: Sequence[CaseResult],
+    ks: Sequence[int] = DEFAULT_KS,
+    *,
+    pricing: PriceTable | None = None,
 ) -> Scorecard:
     by_id = {r.case_id: r for r in results}
     if len(by_id) != len(results):
@@ -62,15 +75,44 @@ def score_run(
         )
 
     per_case: list[CaseScores] = []
+    unpriced_models: list[str] = []
     for case in cases:
         result = by_id[case.id]
         retrieval: dict[str, float] | None = None
         if case.expected_doc_ids:
             retrieved = result.response.retrieved_doc_ids if result.response else ()
             retrieval = retrieval_scores(retrieved, case.expected_doc_ids, ks)
-        per_case.append(CaseScores(case_id=case.id, errored=not result.ok, retrieval=retrieval))
+        cost: float | None = None
+        if pricing is not None and result.response is not None:
+            cost = pricing.cost(result.response.model, result.response.usage)
+            model = result.response.model
+            if cost is None and model is not None and model not in pricing.models:
+                unpriced_models.append(model)
+        per_case.append(
+            CaseScores(
+                case_id=case.id,
+                errored=not result.ok,
+                latency_ms=result.latency_ms,
+                cost=cost,
+                retrieval=retrieval,
+            )
+        )
 
-    return Scorecard(cases=tuple(per_case), retrieval=_aggregate(per_case))
+    cost_summary = None
+    if pricing is not None:
+        cost_summary = summarize_cost(
+            [c.cost for c in per_case],
+            currency=pricing.currency,
+            pricing_as_of=pricing.as_of,
+            pricing_source=pricing.source,
+            unpriced_models=unpriced_models,
+        )
+    return Scorecard(
+        cases=tuple(per_case),
+        retrieval=_aggregate(per_case),
+        latency=summarize_latency([c.latency_ms for c in per_case]),
+        cost=cost_summary,
+    )
 
 
 def _aggregate(per_case: Sequence[CaseScores]) -> dict[str, Aggregate]:

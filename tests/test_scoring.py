@@ -90,7 +90,9 @@ class FixtureSystem(ScriptedSystem):
     def __init__(self) -> None:
         super().__init__(
             {
-                "a": SystemResponse("x", retrieved_doc_ids=("d1",)),
+                "a": SystemResponse(
+                    "x", retrieved_doc_ids=("d1",), usage=Usage(1000, 100), model="mock-small"
+                ),
                 "b": SystemResponse("x", retrieved_doc_ids=("d9", "d2")),
             },
             name="fixture",
@@ -112,6 +114,27 @@ def test_score_command_end_to_end(tmp_path: Path, capsys: pytest.CaptureFixture[
     assert scores["retrieval"]["recall@1"] == {"mean": 0.5, "n": 2, "n_errored": 0}
     assert scores["retrieval"]["recall@2"]["mean"] == 1.0
     assert scores["retrieval"]["mrr"]["mean"] == 0.75
+    assert scores["latency"]["n"] == 2
+    assert scores["cost"] is None
+    assert "cost: skipped" in printed
+
+
+def test_score_command_with_pricing(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    dataset, out = tmp_path / "d.jsonl", tmp_path / "run"
+    _write_dataset(dataset)
+    _run(dataset, out)
+    pricing = Path(__file__).parent.parent / "examples" / "pricing.example.toml"
+    capsys.readouterr()
+
+    assert main(["score", str(out), "--pricing", str(pricing)]) == 0
+    printed = capsys.readouterr().out
+    assert "prices as of 2026-11-24" in printed
+    scores = json.loads((out / "scores.json").read_text())
+    # FixtureSystem: "a" uses mock-small (1000 in, 100 out), "b" reports no usage.
+    # 1000 * 0.50 / 1M + 100 * 2.00 / 1M = 0.0005 + 0.0002
+    assert scores["cost"]["n_priced"] == 1
+    assert scores["cost"]["n_unpriced"] == 1
+    assert scores["cost"]["total"] == pytest.approx(0.0007)
 
 
 def test_score_command_rejects_changed_dataset(
