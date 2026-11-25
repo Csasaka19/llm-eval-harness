@@ -69,12 +69,16 @@ def _parse_case(obj: JSONValue, where: str) -> EvalCase:
     if answer is not None and not isinstance(answer, str):
         raise DatasetError(f"{where}: 'expected_answer' must be a string or null")
 
-    calls_raw = obj.get("expected_tool_calls", [])
-    if not isinstance(calls_raw, list):
-        raise DatasetError(f"{where}: 'expected_tool_calls' must be a list")
-    calls = tuple(
-        _parse_tool_call(c, f"{where}: expected_tool_calls[{i}]") for i, c in enumerate(calls_raw)
-    )
+    # Absent/null = not labelled; [] = "should make no tool calls".
+    calls_raw = obj.get("expected_tool_calls")
+    calls: tuple[ToolCall, ...] | None = None
+    if calls_raw is not None:
+        if not isinstance(calls_raw, list):
+            raise DatasetError(f"{where}: 'expected_tool_calls' must be a list or null")
+        calls = tuple(
+            _parse_tool_call(c, f"{where}: expected_tool_calls[{i}]")
+            for i, c in enumerate(calls_raw)
+        )
 
     metadata = obj.get("metadata", {})
     if not isinstance(metadata, dict):

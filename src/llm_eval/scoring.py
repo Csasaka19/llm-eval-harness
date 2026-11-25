@@ -9,16 +9,19 @@ Honesty rules applied here:
 * Results and dataset must cover exactly the same case ids.
 * Latency covers every request, errored or not: a timeout is part of what users see.
 * Cost is ``None`` (unknown) unless the model and token usage are known and priced.
+* Tool-call scores for an errored case are all 0, even when no calls were expected:
+  a crash is not a correct "no tool needed" decision.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from llm_eval.metrics.cost import CostSummary, summarize_cost
 from llm_eval.metrics.latency import LatencySummary, summarize_latency
 from llm_eval.metrics.retrieval import retrieval_scores
+from llm_eval.metrics.tool_calls import tool_call_scores, zero_tool_call_scores
 from llm_eval.pricing import PriceTable
 from llm_eval.types import CaseResult, EvalCase
 
@@ -36,6 +39,7 @@ class CaseScores:
     latency_ms: float
     cost: float | None = None
     retrieval: dict[str, float] | None = None
+    tool_calls: dict[str, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -51,6 +55,7 @@ class Aggregate:
 class Scorecard:
     cases: tuple[CaseScores, ...]
     retrieval: dict[str, Aggregate] = field(default_factory=dict)
+    tool_calls: dict[str, Aggregate] = field(default_factory=dict)
     latency: LatencySummary | None = None
     cost: CostSummary | None = None
 
@@ -82,6 +87,12 @@ def score_run(
         if case.expected_doc_ids:
             retrieved = result.response.retrieved_doc_ids if result.response else ()
             retrieval = retrieval_scores(retrieved, case.expected_doc_ids, ks)
+        tools: dict[str, float] | None = None
+        if case.expected_tool_calls is not None:
+            if result.response is None:
+                tools = zero_tool_call_scores()
+            else:
+                tools = tool_call_scores(case.expected_tool_calls, result.response.tool_calls)
         cost: float | None = None
         if pricing is not None and result.response is not None:
             cost = pricing.cost(result.response.model, result.response.usage)
@@ -95,6 +106,7 @@ def score_run(
                 latency_ms=result.latency_ms,
                 cost=cost,
                 retrieval=retrieval,
+                tool_calls=tools,
             )
         )
 
@@ -109,21 +121,25 @@ def score_run(
         )
     return Scorecard(
         cases=tuple(per_case),
-        retrieval=_aggregate(per_case),
+        retrieval=_aggregate(per_case, lambda c: c.retrieval),
+        tool_calls=_aggregate(per_case, lambda c: c.tool_calls),
         latency=summarize_latency([c.latency_ms for c in per_case]),
         cost=cost_summary,
     )
 
 
-def _aggregate(per_case: Sequence[CaseScores]) -> dict[str, Aggregate]:
-    scored = [c for c in per_case if c.retrieval is not None]
+def _aggregate(
+    per_case: Sequence[CaseScores], get: Callable[[CaseScores], dict[str, float] | None]
+) -> dict[str, Aggregate]:
+    """Mean of each metric over the cases that have scores for this metric family."""
+    scored = [(c, scores) for c in per_case if (scores := get(c)) is not None]
     if not scored:
         return {}
-    n_errored = sum(1 for c in scored if c.errored)
-    keys = scored[0].retrieval.keys() if scored[0].retrieval else []
+    n_errored = sum(1 for c, _ in scored if c.errored)
+    keys = scored[0][1].keys()
     return {
         key: Aggregate(
-            mean=sum(c.retrieval[key] for c in scored if c.retrieval) / len(scored),
+            mean=sum(scores[key] for _, scores in scored) / len(scored),
             n=len(scored),
             n_errored=n_errored,
         )

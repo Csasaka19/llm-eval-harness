@@ -117,6 +117,7 @@ def test_score_command_end_to_end(tmp_path: Path, capsys: pytest.CaptureFixture[
     assert scores["latency"]["n"] == 2
     assert scores["cost"] is None
     assert "cost: skipped" in printed
+    assert "tool calls: no cases with expected_tool_calls" in printed
 
 
 def test_score_command_with_pricing(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

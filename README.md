@@ -21,7 +21,7 @@ faithfulness, tool-call correctness, latency and cost per request.
 - [x] 2. Core types and runner (cases, results, system adapter, JSONL datasets)
 - [x] 3. Retrieval metrics (recall@k, precision@k, MRR, nDCG)
 - [x] 4. Latency and cost tracking (percentiles, token-based cost)
-- [ ] 5. Tool-call correctness (name, arguments, sequence)
+- [x] 5. Tool-call correctness (name, arguments, sequence)
 - [ ] 6. Answer faithfulness (claim-level judge + human-agreement check)
 - [ ] 7. Sample datasets and a baseline system
 - [ ] 8. Report generator (tables, bootstrap CIs, failure examples)
@@ -55,7 +55,9 @@ an exact dataset version.
 ```
 
 Only `id` and `input` are required. A case counts toward a metric only if it has that
-metric's gold label. Unknown keys, duplicate ids, and type errors are rejected with the
+metric's gold label. For tool calls, omitting `expected_tool_calls` means "not labelled",
+while `"expected_tool_calls": []` means "the system should make **no** tool calls". That
+lets you test for over-eager tool use. Unknown keys, duplicate ids, and type errors are rejected with the
 line number.
 
 ## Metrics
@@ -76,6 +78,34 @@ Conventions, since libraries disagree:
   how many cases errored.
 - `score` refuses to run if the dataset's SHA-256 differs from the one in the run
   manifest, or if result and dataset case IDs don't match exactly.
+
+### Tool-call correctness
+
+Computed for every case with `expected_tool_calls`. Each metric is reported at three
+argument-matching strictness levels, side by side, so you can see how much a score
+depends on leniency:
+
+| Mode | A call matches when |
+|---|---|
+| `exact` | Same name; arguments deep-equal (no extra or missing keys) |
+| `subset` | Same name; every expected argument present and equal; extras allowed |
+| `name` | Same name; arguments ignored |
+
+| Metric | Meaning |
+|---|---|
+| `precision` | Matched / calls made (1.0 if none were made) |
+| `recall` | Matched / calls expected (1.0 if none were expected) |
+| `f1` | Harmonic mean. **Use this as the headline number:** a system that makes no calls gets precision 1.0 |
+| `ordered_recall` | Longest in-order common subsequence / calls expected |
+| `sequence_match` | 1 if the calls made equal the expected calls one-to-one and in order |
+
+- Expected and made calls are paired by **maximum bipartite matching**, not a greedy
+  scan, so a lenient match can't "steal" a call another expectation needed.
+- Calling a tool twice when it was expected once counts as one match and one extra call.
+- Values compare with **JSON semantics**: `1 == 1.0`, but `true != 1`. No normalization
+  (case, whitespace, units) is applied.
+- **Errored cases score 0** on every tool-call metric, even when no calls were expected.
+  A crash is not a correct "no tool needed" decision.
 
 ### Latency
 

@@ -25,14 +25,15 @@ class EvalCase:
     """One evaluation example.
 
     Every ``expected_*`` field is optional: a case only contributes to the metrics
-    whose gold labels it provides.
+    whose gold labels it provides. For tool calls, ``None`` means "not labelled" while an
+    empty tuple means "the system should make no tool calls".
     """
 
     id: str
     input: str
     expected_doc_ids: tuple[str, ...] = ()
     expected_answer: str | None = None
-    expected_tool_calls: tuple[ToolCall, ...] = ()
+    expected_tool_calls: tuple[ToolCall, ...] | None = None
     metadata: JSONObject = field(default_factory=dict)
 
 

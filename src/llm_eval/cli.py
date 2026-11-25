@@ -11,6 +11,7 @@ from pathlib import Path
 
 from llm_eval import __version__
 from llm_eval.dataset import DatasetError, file_sha256, load_jsonl
+from llm_eval.metrics.tool_calls import MATCH_MODES, TOOL_CALL_METRICS
 from llm_eval.pricing import PriceTable, PricingError, load_pricing
 from llm_eval.runner import default_run_dir, run_eval, write_run
 from llm_eval.scoring import DEFAULT_KS, Scorecard, ScoringError, score_run
@@ -135,7 +136,12 @@ def _cmd_score(
 
 
 def _format_scorecard(card: Scorecard) -> str:
-    sections = [_format_retrieval(card), _format_latency(card), _format_cost(card)]
+    sections = [
+        _format_retrieval(card),
+        _format_tool_calls(card),
+        _format_latency(card),
+        _format_cost(card),
+    ]
     return "\n\n".join(s for s in sections if s)
 
 
@@ -148,6 +154,21 @@ def _format_retrieval(card: Scorecard) -> str:
         f"  {'metric':<16}{'mean':>8}",
     ]
     lines += [f"  {name:<16}{agg.mean:>8.3f}" for name, agg in card.retrieval.items()]
+    return "\n".join(lines)
+
+
+def _format_tool_calls(card: Scorecard) -> str:
+    if not card.tool_calls:
+        return "tool calls: no cases with expected_tool_calls"
+    first = next(iter(card.tool_calls.values()))
+    header = "".join(f"{mode:>8}" for mode in MATCH_MODES)
+    lines = [
+        f"tool calls (n={first.n}, errored={first.n_errored}, errored cases score 0)",
+        f"  {'metric':<16}{header}",
+    ]
+    for metric in TOOL_CALL_METRICS:
+        row = "".join(f"{card.tool_calls[f'{mode}/{metric}'].mean:>8.3f}" for mode in MATCH_MODES)
+        lines.append(f"  {metric:<16}{row}")
     return "\n".join(lines)
 
 

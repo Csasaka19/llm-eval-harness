@@ -22,8 +22,13 @@ def test_minimal_case_has_empty_defaults() -> None:
     [case] = parse_lines(['{"id": "a", "input": "q"}'])
     assert case.expected_doc_ids == ()
     assert case.expected_answer is None
-    assert case.expected_tool_calls == ()
+    assert case.expected_tool_calls is None
     assert case.metadata == {}
+
+
+def test_empty_tool_call_list_means_no_calls_expected() -> None:
+    [case] = parse_lines(['{"id": "a", "input": "q", "expected_tool_calls": []}'])
+    assert case.expected_tool_calls == ()
 
 
 def test_skips_blank_and_comment_lines() -> None:
