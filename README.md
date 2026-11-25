@@ -25,7 +25,7 @@ faithfulness, tool-call correctness, latency and cost per request.
 - [x] 6. Answer faithfulness (claim-level judge + human-agreement check)
 - [x] 7. Sample datasets and a baseline system
 - [x] 7.5. Answer correctness (exact match, token F1/recall vs reference)
-- [ ] 8. Report generator (tables, bootstrap CIs, failure examples)
+- [x] 8. Report generator (tables, bootstrap CIs, failure examples)
 - [ ] 9. First public eval report with full methodology
 
 ## Quick start
@@ -51,7 +51,32 @@ llm-eval score runs/demo --k 1 5 --pricing examples/pricing.example.toml --judge
 
 llm-eval calibrate --judge overlap --labels examples/faithfulness_calibration.jsonl
 # -> agreement between the judge and human labels, plus every disagreement
+
+llm-eval report runs/demo --judge overlap \
+    --calibration-labels examples/faithfulness_calibration.jsonl
+# -> runs/demo/report.md (use --out to write elsewhere)
 ```
+
+### Reports
+
+`report` re-scores a run (it takes the same options as `score`) and writes a Markdown
+report with:
+
+- **Summary:** each headline metric's mean, **95% bootstrap confidence interval**, *n*,
+  and errored count
+- **Results by case type**, when cases have `metadata.type`
+- **Latency** (with CIs on the mean and percentiles) and **cost**
+- **Judge calibration**, if `--calibration-labels` is given. Otherwise the report says
+  the faithfulness judge is unvalidated.
+- **Worst cases** for each metric, with the evidence: expected vs retrieved docs,
+  expected vs made calls, reference vs answer, and each claim's verdict
+- **Methodology** and **limitations**, generated from the conventions in the code. A
+  small-sample warning is added automatically below 100 cases.
+
+Confidence intervals use a percentile bootstrap over cases: 2000 resamples, fixed seed,
+so reports are reproducible. They assume cases are independent, and they are
+**optimistic for small n**. On 20 agent tasks, the rules baseline's F1 of 0.80 has a CI
+of [0.60, 0.95].
 
 `--system` takes a builtin alias (`echo`) or any `package.module:ClassName` whose class
 has a `name` and a `run(case) -> SystemResponse` method (see `llm_eval.system.System`).

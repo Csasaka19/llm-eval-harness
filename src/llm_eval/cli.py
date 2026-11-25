@@ -15,10 +15,12 @@ from llm_eval.dataset import DatasetError, file_sha256, load_jsonl
 from llm_eval.judges import BUILTIN_JUDGES, Judge, load_judge
 from llm_eval.metrics.tool_calls import MATCH_MODES, TOOL_CALL_METRICS
 from llm_eval.pricing import PriceTable, PricingError, load_pricing
+from llm_eval.report import ReportInputs, render_report
 from llm_eval.runner import default_run_dir, run_eval, write_run
 from llm_eval.scoring import DEFAULT_KS, Scorecard, ScoringError, score_run
 from llm_eval.serialization import RunFormatError, read_manifest, read_results
 from llm_eval.system import BUILTIN_SYSTEMS, load_system
+from llm_eval.types import CaseResult, EvalCase, JSONObject
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -51,6 +53,21 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--system", required=True, help=system_help)
     bench.add_argument("--out", type=Path, default=None, help="output dir (default: runs/<utc>)")
     _add_score_options(bench)
+
+    rep = sub.add_parser("report", help="score a saved run and write a Markdown report")
+    rep.add_argument("run_dir", type=Path, help="directory written by `llm-eval run`")
+    rep.add_argument("--dataset", type=Path, default=None, help="as for `score`")
+    _add_score_options(rep)
+    rep.add_argument(
+        "--calibration-labels",
+        type=Path,
+        default=None,
+        help="labelled claims; calibrates --judge and includes the result in the report",
+    )
+    rep.add_argument(
+        "--out", type=Path, default=None, help="report path (default: RUN_DIR/report.md)"
+    )
+    rep.add_argument("--worst", type=int, default=5, help="worst cases shown per metric")
 
     cal = sub.add_parser("calibrate", help="measure a judge's agreement with human labels")
     cal.add_argument("--judge", required=True, help=JUDGE_HELP)
@@ -93,6 +110,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         return score_code or code
     if args.command == "score":
         return _cmd_score(args.run_dir, args.dataset, args.k, args.pricing, args.judge)
+    if args.command == "report":
+        return _cmd_report(
+            args.run_dir,
+            args.dataset,
+            args.k,
+            args.pricing,
+            args.judge,
+            args.calibration_labels,
+            args.out,
+            args.worst,
+        )
     if args.command == "calibrate":
         return _cmd_calibrate(args.judge, args.labels, args.out)
     parser.print_help()
@@ -126,15 +154,30 @@ def _cmd_run(dataset: Path, system_spec: str, out: Path | None) -> tuple[int, Pa
     return (1 if run.error_count else 0), out_dir
 
 
-def _cmd_score(
+@dataclasses.dataclass(frozen=True)
+class _Scored:
+    card: Scorecard
+    cases: list[EvalCase]
+    results: list[CaseResult]
+    manifest: JSONObject
+    ks: list[int]
+
+
+def _load_and_score(
     run_dir: Path,
     dataset: Path | None,
     ks: list[int],
     pricing_path: Path | None,
     judge_spec: str | None,
-) -> int:
+) -> _Scored | int:
+    """Load a run, verify its dataset, and score it. Returns an exit code on failure."""
     if any(k < 1 for k in ks):
         print("error: --k values must be >= 1", file=sys.stderr)
+        return 2
+    try:
+        judge: Judge | None = load_judge(judge_spec) if judge_spec else None
+    except (ImportError, AttributeError, ValueError, TypeError) as exc:
+        print(f"error: could not load judge: {exc}", file=sys.stderr)
         return 2
     try:
         manifest = read_manifest(run_dir)
@@ -155,19 +198,76 @@ def _cmd_score(
             return 2
         cases = load_jsonl(dataset)
         pricing: PriceTable | None = load_pricing(pricing_path) if pricing_path else None
-        judge: Judge | None = load_judge(judge_spec) if judge_spec else None
-        card = score_run(cases, results, sorted(set(ks)), pricing=pricing, judge=judge)
+        sorted_ks = sorted(set(ks))
+        card = score_run(cases, results, sorted_ks, pricing=pricing, judge=judge)
     except (OSError, DatasetError, RunFormatError, ScoringError, PricingError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    except (ImportError, AttributeError, ValueError, TypeError) as exc:
-        print(f"error: could not load judge: {exc}", file=sys.stderr)
-        return 2
+    return _Scored(card, cases, results, manifest, sorted_ks)
 
+
+def _write_scores(run_dir: Path, card: Scorecard) -> Path:
     out = run_dir / "scores.json"
     out.write_text(json.dumps(dataclasses.asdict(card), indent=2) + "\n", encoding="utf-8")
-    print(_format_scorecard(card))
+    return out
+
+
+def _cmd_score(
+    run_dir: Path,
+    dataset: Path | None,
+    ks: list[int],
+    pricing_path: Path | None,
+    judge_spec: str | None,
+) -> int:
+    scored = _load_and_score(run_dir, dataset, ks, pricing_path, judge_spec)
+    if isinstance(scored, int):
+        return scored
+    out = _write_scores(run_dir, scored.card)
+    print(_format_scorecard(scored.card))
     print(f"\nwrote {out}")
+    return 0
+
+
+def _cmd_report(
+    run_dir: Path,
+    dataset: Path | None,
+    ks: list[int],
+    pricing_path: Path | None,
+    judge_spec: str | None,
+    calibration_labels: Path | None,
+    out: Path | None,
+    worst_n: int,
+) -> int:
+    if calibration_labels is not None and judge_spec is None:
+        print("error: --calibration-labels requires --judge", file=sys.stderr)
+        return 2
+    scored = _load_and_score(run_dir, dataset, ks, pricing_path, judge_spec)
+    if isinstance(scored, int):
+        return scored
+    calibration: CalibrationReport | None = None
+    if calibration_labels is not None and judge_spec is not None:
+        try:
+            calibration = calibrate(load_judge(judge_spec), load_labels(calibration_labels))
+        except (OSError, CalibrationError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    _write_scores(run_dir, scored.card)
+    text = render_report(
+        ReportInputs(
+            card=scored.card,
+            cases=scored.cases,
+            results=scored.results,
+            manifest=scored.manifest,
+            ks=scored.ks,
+            calibration=calibration,
+            calibration_source=str(calibration_labels) if calibration_labels else None,
+            worst_n=worst_n,
+        )
+    )
+    path = out or run_dir / "report.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    print(f"wrote {path}")
     return 0
 
 
