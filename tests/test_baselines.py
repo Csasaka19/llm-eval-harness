@@ -169,6 +169,8 @@ def test_bench_rag_baseline_pinned(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     scores = json.loads((out / "scores.json").read_text())
     assert scores["retrieval"]["recall@1"]["mean"] == pytest.approx(0.8625)
     assert scores["retrieval"]["mrr"]["mean"] == pytest.approx(0.9292, abs=1e-4)
+    assert scores["correctness"]["exact_match"]["mean"] == 0.0
+    assert scores["correctness"]["token_recall"]["mean"] == pytest.approx(0.621, abs=1e-3)
 
 
 def test_bench_stops_if_system_cannot_load(

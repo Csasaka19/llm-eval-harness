@@ -15,6 +15,7 @@ Honesty rules applied here:
   ``expected_doc_ids`` or whose response includes retrieved contexts. An errored RAG case
   scores 0. A RAG case that retrieved nothing is judged against empty context, so any
   claim it makes is unsupported.
+* Answer correctness covers cases with ``expected_answer``; an errored case scores 0.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from llm_eval.judges import ClaimVerdict, Judge
+from llm_eval.metrics.correctness import correctness_scores, zero_correctness_scores
 from llm_eval.metrics.cost import CostSummary, summarize_cost
 from llm_eval.metrics.faithfulness import judge_answer, zero_faithfulness_scores
 from llm_eval.metrics.latency import LatencySummary, summarize_latency
@@ -47,6 +49,7 @@ class CaseScores:
     retrieval: dict[str, float] | None = None
     tool_calls: dict[str, float] | None = None
     faithfulness: dict[str, float] | None = None
+    correctness: dict[str, float] | None = None
     claims: tuple[ClaimVerdict, ...] | None = None
 
 
@@ -65,6 +68,7 @@ class Scorecard:
     retrieval: dict[str, Aggregate] = field(default_factory=dict)
     tool_calls: dict[str, Aggregate] = field(default_factory=dict)
     faithfulness: dict[str, Aggregate] = field(default_factory=dict)
+    correctness: dict[str, Aggregate] = field(default_factory=dict)
     judge: str | None = None
     latency: LatencySummary | None = None
     cost: CostSummary | None = None
@@ -113,6 +117,12 @@ def score_run(
                     faith = zero_faithfulness_scores()
             elif case.expected_doc_ids or contexts:
                 faith, claims = judge_answer(result.response.answer, contexts, judge)
+        correct: dict[str, float] | None = None
+        if case.expected_answer is not None:
+            if result.response is None:
+                correct = zero_correctness_scores()
+            else:
+                correct = correctness_scores(result.response.answer, case.expected_answer)
         cost: float | None = None
         if pricing is not None and result.response is not None:
             cost = pricing.cost(result.response.model, result.response.usage)
@@ -128,6 +138,7 @@ def score_run(
                 retrieval=retrieval,
                 tool_calls=tools,
                 faithfulness=faith,
+                correctness=correct,
                 claims=claims,
             )
         )
@@ -146,6 +157,7 @@ def score_run(
         retrieval=_aggregate(per_case, lambda c: c.retrieval),
         tool_calls=_aggregate(per_case, lambda c: c.tool_calls),
         faithfulness=_aggregate(per_case, lambda c: c.faithfulness),
+        correctness=_aggregate(per_case, lambda c: c.correctness),
         judge=judge.name if judge else None,
         latency=summarize_latency([c.latency_ms for c in per_case]),
         cost=cost_summary,

@@ -24,6 +24,7 @@ faithfulness, tool-call correctness, latency and cost per request.
 - [x] 5. Tool-call correctness (name, arguments, sequence)
 - [x] 6. Answer faithfulness (claim-level judge + human-agreement check)
 - [x] 7. Sample datasets and a baseline system
+- [x] 7.5. Answer correctness (exact match, token F1/recall vs reference)
 - [ ] 8. Report generator (tables, bootstrap CIs, failure examples)
 - [ ] 9. First public eval report with full methodology
 
@@ -112,12 +113,13 @@ Results (deterministic, pinned in tests):
 | `bm25` | recall@1 | 0.863 | direct 1.00 · distractor 1.00 · paraphrase 0.62 · multi-doc 0.38 |
 | `bm25` | MRR | 0.929 | |
 | `bm25` | faithfulness (overlap) | 1.000 | extractive, so faithful by construction |
+| `bm25` | answer token recall | 0.621 | exact match 0.000 (extractive sentences never equal short references) |
 | `rules-agent` | F1 (all modes) | 0.800 | fails exactly the 4 paraphrase tasks; 6/6 no-tool correct |
 
 **Faithful is not the same as correct.** For *"What is the flight time of the K-200?"*
 the BM25 baseline answers *"The K-200 is the Kestrel survey drone."* That sentence comes
 from the right document, so faithfulness is 1.0, but it doesn't answer the question.
-`expected_answer` is not scored yet.
+Answer correctness catches this: token recall is 0. That is why both are reported.
 
 ## Metrics
 
@@ -207,6 +209,28 @@ next to its scores.
 
 > The labels in `examples/faithfulness_calibration.jsonl` are a **draft**. They must be
 > reviewed by a human before a published report relies on them.
+
+### Answer correctness
+
+Computed for every case with `expected_answer`, using standard question-answering token
+metrics:
+
+| Metric | Meaning |
+|---|---|
+| `exact_match` | Normalized answer == normalized reference |
+| `token_f1` | F1 over normalized tokens (SQuAD-style) |
+| `token_recall` | Share of reference tokens that appear in the answer |
+
+F1 penalizes long answers even when they contain the right fact, and recall doesn't, so
+both are shown. Normalization lowercases and drops articles and punctuation, but **keeps
+numbers intact** (SQuAD would turn `1.8` into `18`). An errored case scores 0.
+
+These metrics measure word overlap, not meaning. A real false negative from the BM25
+baseline: the question is *"Can I fly premium economy on a 9-hour flight?"*, the
+reference is *"Yes"*, and the answer *"Premium economy is allowed for flights of 6 hours or
+longer"* is correct but scores 0. Of the 10 BM25 answers scoring 0, the other 9 really
+are wrong. A meaning-based grader (an LLM, for example) would need the same human-label
+calibration as the faithfulness judge.
 
 ### Latency
 

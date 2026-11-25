@@ -176,6 +176,7 @@ def _format_scorecard(card: Scorecard) -> str:
         _format_retrieval(card),
         _format_tool_calls(card),
         _format_faithfulness(card),
+        _format_correctness(card),
         _format_latency(card),
         _format_cost(card),
     ]
@@ -222,6 +223,19 @@ def _format_faithfulness(card: Scorecard) -> str:
             "  note: only as trustworthy as the judge's calibration (llm-eval calibrate)",
         ]
     )
+
+
+def _format_correctness(card: Scorecard) -> str:
+    if not card.correctness:
+        return "answer correctness: no cases with expected_answer"
+    first = next(iter(card.correctness.values()))
+    lines = [
+        f"answer correctness vs expected_answer (n={first.n}, errored={first.n_errored})",
+        f"  {'metric':<16}{'mean':>8}",
+    ]
+    lines += [f"  {name:<16}{agg.mean:>8.3f}" for name, agg in card.correctness.items()]
+    lines.append("  note: token overlap, not meaning; see README for limitations")
+    return "\n".join(lines)
 
 
 def _format_latency(card: Scorecard) -> str:
