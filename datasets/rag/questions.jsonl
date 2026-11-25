@@ -1,0 +1,42 @@
+// Questions over datasets/rag/corpus.jsonl (fictional company, so answers cannot come from model memory).
+// metadata.type: direct | paraphrase (little word overlap with the source) | multi-doc | distractor (a superseded doc competes)
+{"id": "rag-01", "input": "How many PTO days do full-time employees get per year?", "expected_doc_ids": ["pto-policy"], "expected_answer": "22 days", "metadata": {"type": "distractor"}}
+{"id": "rag-02", "input": "How many unused vacation days can I bring into next year?", "expected_doc_ids": ["pto-policy"], "expected_answer": "Up to 5 days", "metadata": {"type": "distractor"}}
+{"id": "rag-03", "input": "How long is paid parental leave?", "expected_doc_ids": ["parental-leave"], "expected_answer": "16 weeks", "metadata": {"type": "direct"}}
+{"id": "rag-04", "input": "Can I split my time off after having a baby into several parts?", "expected_doc_ids": ["parental-leave"], "expected_answer": "Yes, into up to three blocks", "metadata": {"type": "paraphrase"}}
+{"id": "rag-05", "input": "When do I need a doctor's note for sick leave?", "expected_doc_ids": ["sick-leave"], "expected_answer": "For absences longer than 5 working days", "metadata": {"type": "direct"}}
+{"id": "rag-06", "input": "What is the deadline for submitting expenses?", "expected_doc_ids": ["expense-policy"], "expected_answer": "Within 30 days of purchase", "metadata": {"type": "direct"}}
+{"id": "rag-07", "input": "How much can I spend on food per day on a business trip?", "expected_doc_ids": ["expense-policy"], "expected_answer": "60 euros per day", "metadata": {"type": "paraphrase"}}
+{"id": "rag-08", "input": "Which portal do I use to book flights?", "expected_doc_ids": ["travel-booking"], "expected_answer": "TripDesk", "metadata": {"type": "direct"}}
+{"id": "rag-09", "input": "Can I fly premium economy on a 9-hour flight?", "expected_doc_ids": ["travel-booking"], "expected_answer": "Yes", "metadata": {"type": "direct"}}
+{"id": "rag-10", "input": "How much money do new hires get to set up their home office?", "expected_doc_ids": ["equipment-stipend"], "expected_answer": "750 euros", "metadata": {"type": "direct"}}
+{"id": "rag-11", "input": "Where is the company headquarters?", "expected_doc_ids": ["office-lisbon"], "expected_answer": "Rua da Prata 120, Lisbon", "metadata": {"type": "direct"}}
+{"id": "rag-12", "input": "Which teams work out of Nairobi?", "expected_doc_ids": ["office-nairobi"], "expected_answer": "Field operations and customer support", "metadata": {"type": "direct"}}
+{"id": "rag-13", "input": "In which city do drones get flight-tested?", "expected_doc_ids": ["office-austin"], "expected_answer": "Austin", "metadata": {"type": "paraphrase"}}
+{"id": "rag-14", "input": "What is the flight time of the K-200?", "expected_doc_ids": ["k200-specs"], "expected_answer": "42 minutes", "metadata": {"type": "direct"}}
+{"id": "rag-15", "input": "How much weight can the K-200 carry?", "expected_doc_ids": ["k200-specs"], "expected_answer": "1.8 kg", "metadata": {"type": "paraphrase"}}
+{"id": "rag-16", "input": "How long does the K-200 battery take to charge?", "expected_doc_ids": ["k200-battery"], "expected_answer": "75 minutes", "metadata": {"type": "direct"}}
+{"id": "rag-17", "input": "At what charge level should batteries be stored long term?", "expected_doc_ids": ["k200-battery"], "expected_answer": "40 to 60 percent", "metadata": {"type": "direct"}}
+{"id": "rag-18", "input": "How much can the K-300 lift?", "expected_doc_ids": ["k300-specs"], "expected_answer": "5 kg", "metadata": {"type": "direct"}}
+{"id": "rag-19", "input": "Which drone stays in the air longer, the K-200 or the K-300?", "expected_doc_ids": ["k200-specs", "k300-specs"], "expected_answer": "The K-200 (42 minutes vs 31 minutes)", "metadata": {"type": "multi-doc"}}
+{"id": "rag-20", "input": "How do I install a firmware update, and which app is that?", "expected_doc_ids": ["k200-firmware", "fleet-app"], "expected_answer": "Through the Kestrel Fleet mobile app, never over USB", "metadata": {"type": "multi-doc"}}
+{"id": "rag-21", "input": "Which firmware version added low-light obstacle avoidance?", "expected_doc_ids": ["k200-firmware"], "expected_answer": "Version 4.2", "metadata": {"type": "direct"}}
+{"id": "rag-22", "input": "Is it covered if I crash my drone?", "expected_doc_ids": ["warranty", "careplus"], "expected_answer": "Only with CarePlus; the standard warranty excludes crash damage", "metadata": {"type": "multi-doc"}}
+{"id": "rag-23", "input": "How much does CarePlus cost?", "expected_doc_ids": ["careplus"], "expected_answer": "199 euros per year per drone", "metadata": {"type": "direct"}}
+{"id": "rag-24", "input": "What is the deductible on a CarePlus claim?", "expected_doc_ids": ["careplus"], "expected_answer": "50 euros", "metadata": {"type": "direct"}}
+{"id": "rag-25", "input": "Can I send back a drone I already unboxed?", "expected_doc_ids": ["returns"], "expected_answer": "Yes, within 14 days with a 15 percent restocking fee", "metadata": {"type": "paraphrase"}}
+{"id": "rag-26", "input": "When can I call support by phone?", "expected_doc_ids": ["support-hours"], "expected_answer": "7:00 to 22:00 East Africa Time", "metadata": {"type": "direct"}}
+{"id": "rag-27", "input": "How fast do enterprise customers get a first response for a priority-1 incident?", "expected_doc_ids": ["sla"], "expected_answer": "Within 4 hours", "metadata": {"type": "direct"}}
+{"id": "rag-28", "input": "How much extra pay do engineers get for a week on call?", "expected_doc_ids": ["oncall"], "expected_answer": "300 euros", "metadata": {"type": "paraphrase"}}
+{"id": "rag-29", "input": "When does an on-call shift start?", "expected_doc_ids": ["oncall"], "expected_answer": "Mondays at 10:00 Lisbon time", "metadata": {"type": "direct"}}
+{"id": "rag-30", "input": "What counts as a SEV1 incident?", "expected_doc_ids": ["incident-severity"], "expected_answer": "A full Kestrel Fleet outage or any safety issue with a drone in flight", "metadata": {"type": "direct"}}
+{"id": "rag-31", "input": "How quickly must the status page be updated during a SEV1?", "expected_doc_ids": ["incident-severity"], "expected_answer": "Within 30 minutes", "metadata": {"type": "direct"}}
+{"id": "rag-32", "input": "If the Fleet app goes completely down, how long do we have to write it up afterwards?", "expected_doc_ids": ["incident-severity", "postmortems"], "expected_answer": "It is a SEV1, so a postmortem is due within 5 business days", "metadata": {"type": "multi-doc"}}
+{"id": "rag-33", "input": "How often do mobile app releases ship?", "expected_doc_ids": ["release-process"], "expected_answer": "Every second Tuesday", "metadata": {"type": "direct"}}
+{"id": "rag-34", "input": "Who has to sign off on a hotfix?", "expected_doc_ids": ["release-process"], "expected_answer": "QA", "metadata": {"type": "direct"}}
+{"id": "rag-35", "input": "How many approvals do flight-control code changes need?", "expected_doc_ids": ["code-review"], "expected_answer": "Two, one of them from the flight-safety team", "metadata": {"type": "direct"}}
+{"id": "rag-36", "input": "What is the minimum password length?", "expected_doc_ids": ["security-passwords"], "expected_answer": "14 characters", "metadata": {"type": "direct"}}
+{"id": "rag-37", "input": "I think my laptop was hacked. Who do I tell?", "expected_doc_ids": ["security-incidents"], "expected_answer": "security@kestrel.example, within 1 hour", "metadata": {"type": "paraphrase"}}
+{"id": "rag-38", "input": "How long are customer flight logs kept?", "expected_doc_ids": ["data-retention"], "expected_answer": "18 months", "metadata": {"type": "direct"}}
+{"id": "rag-39", "input": "Who started the company?", "expected_doc_ids": ["company-history"], "expected_answer": "Ana Ferreira and Daniel Otieno", "metadata": {"type": "paraphrase"}}
+{"id": "rag-40", "input": "How much can I spend on courses and books each year?", "expected_doc_ids": ["learning-budget"], "expected_answer": "1,000 euros", "metadata": {"type": "direct"}}

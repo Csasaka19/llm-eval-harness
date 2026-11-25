@@ -32,11 +32,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = sub.add_parser("run", help="run a system over a dataset and save raw results")
     run.add_argument("--dataset", required=True, type=Path, help="path to a JSONL dataset")
-    run.add_argument(
-        "--system",
-        required=True,
-        help=f"builtin ({', '.join(sorted(BUILTIN_SYSTEMS))}) or 'module:ClassName'",
-    )
+    system_help = f"builtin ({', '.join(sorted(BUILTIN_SYSTEMS))}) or 'module:ClassName'"
+    run.add_argument("--system", required=True, help=system_help)
     run.add_argument("--out", type=Path, default=None, help="output dir (default: runs/<utc>)")
 
     score = sub.add_parser("score", help="score a saved run against its dataset")
@@ -47,36 +44,53 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="dataset path (default: the one recorded in the manifest); must match its sha256",
     )
-    score.add_argument(
+    _add_score_options(score)
+
+    bench = sub.add_parser("bench", help="run a system over a dataset, then score it")
+    bench.add_argument("--dataset", required=True, type=Path, help="path to a JSONL dataset")
+    bench.add_argument("--system", required=True, help=system_help)
+    bench.add_argument("--out", type=Path, default=None, help="output dir (default: runs/<utc>)")
+    _add_score_options(bench)
+
+    cal = sub.add_parser("calibrate", help="measure a judge's agreement with human labels")
+    cal.add_argument("--judge", required=True, help=JUDGE_HELP)
+    cal.add_argument("--labels", required=True, type=Path, help="JSONL of labelled claims")
+    cal.add_argument("--out", type=Path, default=None, help="write the report as JSON here")
+    return parser
+
+
+JUDGE_HELP = f"faithfulness judge: builtin ({', '.join(sorted(BUILTIN_JUDGES))}) or module:Class"
+
+
+def _add_score_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
         "--k",
         type=int,
         nargs="+",
         default=list(DEFAULT_KS),
         help=f"cutoffs for @k metrics (default: {' '.join(map(str, DEFAULT_KS))})",
     )
-    score.add_argument(
+    parser.add_argument(
         "--pricing",
         type=Path,
         default=None,
         help="TOML price table (see examples/pricing.example.toml); omit to skip cost",
     )
-    judge_help = (
-        f"faithfulness judge: builtin ({', '.join(sorted(BUILTIN_JUDGES))}) or module:Class"
-    )
-    score.add_argument("--judge", default=None, help=judge_help + "; omit to skip faithfulness")
-
-    cal = sub.add_parser("calibrate", help="measure a judge's agreement with human labels")
-    cal.add_argument("--judge", required=True, help=judge_help)
-    cal.add_argument("--labels", required=True, type=Path, help="JSONL of labelled claims")
-    cal.add_argument("--out", type=Path, default=None, help="write the report as JSON here")
-    return parser
+    parser.add_argument("--judge", default=None, help=JUDGE_HELP + "; omit to skip faithfulness")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.command == "run":
-        return _cmd_run(args.dataset, args.system, args.out)
+        return _cmd_run(args.dataset, args.system, args.out)[0]
+    if args.command == "bench":
+        code, out_dir = _cmd_run(args.dataset, args.system, args.out)
+        if out_dir is None:
+            return code
+        print()
+        score_code = _cmd_score(out_dir, None, args.k, args.pricing, args.judge)
+        return score_code or code
     if args.command == "score":
         return _cmd_score(args.run_dir, args.dataset, args.k, args.pricing, args.judge)
     if args.command == "calibrate":
@@ -85,17 +99,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-def _cmd_run(dataset: Path, system_spec: str, out: Path | None) -> int:
+def _cmd_run(dataset: Path, system_spec: str, out: Path | None) -> tuple[int, Path | None]:
+    """Returns (exit code, run directory or None if nothing was written)."""
     try:
         cases = load_jsonl(dataset)
     except (OSError, DatasetError) as exc:
         print(f"error: {exc}", file=sys.stderr)
-        return 2
+        return 2, None
     try:
         system = load_system(system_spec)
-    except (ImportError, AttributeError, ValueError, TypeError) as exc:
+    except (OSError, ImportError, AttributeError, ValueError, TypeError) as exc:
         print(f"error: could not load system: {exc}", file=sys.stderr)
-        return 2
+        return 2, None
 
     run = run_eval(system, cases)
     out_dir = write_run(
@@ -108,7 +123,7 @@ def _cmd_run(dataset: Path, system_spec: str, out: Path | None) -> int:
         },
     )
     print(f"{len(run.results)} cases, {run.error_count} errors -> {out_dir}")
-    return 1 if run.error_count else 0
+    return (1 if run.error_count else 0), out_dir
 
 
 def _cmd_score(

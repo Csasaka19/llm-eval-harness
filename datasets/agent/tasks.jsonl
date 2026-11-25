@@ -1,0 +1,22 @@
+// Agent tool-use tasks; schemas in datasets/agent/tools.json.
+// metadata.type: single | multi (several calls, order matters) | no-tool (answer directly; tests over-eager tool use) | paraphrase
+{"id": "agent-01", "input": "What's the weather in Lisbon in celsius?", "expected_tool_calls": [{"name": "get_weather", "arguments": {"city": "Lisbon", "unit": "celsius"}}], "metadata": {"type": "single"}}
+{"id": "agent-02", "input": "Is it hot in Austin right now? Give me fahrenheit.", "expected_tool_calls": [{"name": "get_weather", "arguments": {"city": "Austin", "unit": "fahrenheit"}}], "metadata": {"type": "paraphrase"}}
+{"id": "agent-03", "input": "Convert 250 EUR to KES.", "expected_tool_calls": [{"name": "convert_currency", "arguments": {"amount": 250, "from": "EUR", "to": "KES"}}], "metadata": {"type": "single"}}
+{"id": "agent-04", "input": "How much is 1200 US dollars in euros?", "expected_tool_calls": [{"name": "convert_currency", "arguments": {"amount": 1200, "from": "USD", "to": "EUR"}}], "metadata": {"type": "paraphrase"}}
+{"id": "agent-05", "input": "Open a high priority ticket: K-200 battery swelling", "expected_tool_calls": [{"name": "create_ticket", "arguments": {"title": "K-200 battery swelling", "priority": "high"}}], "metadata": {"type": "single"}}
+{"id": "agent-06", "input": "Create a low priority ticket titled 'Typo in settings page'.", "expected_tool_calls": [{"name": "create_ticket", "arguments": {"title": "Typo in settings page", "priority": "low"}}], "metadata": {"type": "single"}}
+{"id": "agent-07", "input": "Download the flight log for drone KX-1042.", "expected_tool_calls": [{"name": "get_flight_log", "arguments": {"drone_id": "KX-1042"}}], "metadata": {"type": "single"}}
+{"id": "agent-08", "input": "Search the docs for the CarePlus deductible.", "expected_tool_calls": [{"name": "search_docs", "arguments": {"query": "CarePlus deductible"}}], "metadata": {"type": "single"}}
+{"id": "agent-09", "input": "What is 2 + 2?", "expected_tool_calls": [], "metadata": {"type": "no-tool"}}
+{"id": "agent-10", "input": "Thanks, that's all!", "expected_tool_calls": [], "metadata": {"type": "no-tool"}}
+{"id": "agent-11", "input": "Write a haiku about drones.", "expected_tool_calls": [], "metadata": {"type": "no-tool"}}
+{"id": "agent-12", "input": "Translate 'good morning' into Portuguese.", "expected_tool_calls": [], "metadata": {"type": "no-tool"}}
+{"id": "agent-13", "input": "What's the weather in Nairobi and in Lisbon, in celsius?", "expected_tool_calls": [{"name": "get_weather", "arguments": {"city": "Nairobi", "unit": "celsius"}}, {"name": "get_weather", "arguments": {"city": "Lisbon", "unit": "celsius"}}], "metadata": {"type": "multi"}}
+{"id": "agent-14", "input": "Get the flight log for KX-2001 and open a high priority ticket titled 'KX-2001 crash review'.", "expected_tool_calls": [{"name": "get_flight_log", "arguments": {"drone_id": "KX-2001"}}, {"name": "create_ticket", "arguments": {"title": "KX-2001 crash review", "priority": "high"}}], "metadata": {"type": "multi"}}
+{"id": "agent-15", "input": "Search the docs for the on-call allowance, then convert 300 EUR to USD.", "expected_tool_calls": [{"name": "search_docs", "arguments": {"query": "on-call allowance"}}, {"name": "convert_currency", "arguments": {"amount": 300, "from": "EUR", "to": "USD"}}], "metadata": {"type": "multi"}}
+{"id": "agent-16", "input": "Should I bring an umbrella in Austin today? Use celsius.", "expected_tool_calls": [{"name": "get_weather", "arguments": {"city": "Austin", "unit": "celsius"}}], "metadata": {"type": "paraphrase"}}
+{"id": "agent-17", "input": "Tell me a joke about the weather.", "expected_tool_calls": [], "metadata": {"type": "no-tool"}}
+{"id": "agent-18", "input": "Who are you?", "expected_tool_calls": [], "metadata": {"type": "no-tool"}}
+{"id": "agent-19", "input": "Convert 50 GBP to EUR.", "expected_tool_calls": [{"name": "convert_currency", "arguments": {"amount": 50, "from": "GBP", "to": "EUR"}}], "metadata": {"type": "single"}}
+{"id": "agent-20", "input": "I want to report a medium priority issue titled 'Fleet app login loop'.", "expected_tool_calls": [{"name": "create_ticket", "arguments": {"title": "Fleet app login loop", "priority": "medium"}}], "metadata": {"type": "paraphrase"}}

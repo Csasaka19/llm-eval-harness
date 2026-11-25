@@ -24,6 +24,8 @@ class System(Protocol):
 
 BUILTIN_SYSTEMS: dict[str, str] = {
     "echo": "llm_eval.systems.mock:EchoSystem",
+    "bm25": "llm_eval.systems.bm25:BM25RagSystem",
+    "rules-agent": "llm_eval.systems.rules_agent:RulesAgent",
 }
 
 

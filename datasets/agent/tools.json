@@ -1,0 +1,10 @@
+{
+  "_comment": "Tool schemas for datasets/agent/tasks.jsonl. Documentation for system authors; the harness does not execute tools.",
+  "tools": [
+    {"name": "get_weather", "parameters": {"city": "string", "unit": "\"celsius\" | \"fahrenheit\""}},
+    {"name": "convert_currency", "parameters": {"amount": "number", "from": "ISO 4217 code", "to": "ISO 4217 code"}},
+    {"name": "search_docs", "parameters": {"query": "string"}},
+    {"name": "create_ticket", "parameters": {"title": "string", "priority": "\"low\" | \"medium\" | \"high\""}},
+    {"name": "get_flight_log", "parameters": {"drone_id": "string, e.g. KX-1042"}}
+  ]
+}

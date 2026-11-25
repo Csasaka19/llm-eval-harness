@@ -23,9 +23,21 @@ faithfulness, tool-call correctness, latency and cost per request.
 - [x] 4. Latency and cost tracking (percentiles, token-based cost)
 - [x] 5. Tool-call correctness (name, arguments, sequence)
 - [x] 6. Answer faithfulness (claim-level judge + human-agreement check)
-- [ ] 7. Sample datasets and a baseline system
+- [x] 7. Sample datasets and a baseline system
 - [ ] 8. Report generator (tables, bootstrap CIs, failure examples)
 - [ ] 9. First public eval report with full methodology
+
+## Quick start
+
+```bash
+# RAG baseline: BM25 retrieval + extractive answer, scored with the overlap judge
+llm-eval bench --dataset datasets/rag/questions.jsonl --system bm25 --judge overlap
+
+# Agent baseline: regex rules -> tool calls
+llm-eval bench --dataset datasets/agent/tasks.jsonl --system rules-agent
+```
+
+`bench` = `run` + `score`. Both baselines are deterministic and need no API keys.
 
 ## Usage
 
@@ -62,6 +74,50 @@ metric's gold label. For tool calls, omitting `expected_tool_calls` means "not l
 while `"expected_tool_calls": []` means "the system should make **no** tool calls". That
 lets you test for over-eager tool use. Unknown keys, duplicate ids, and type errors are rejected with the
 line number.
+
+## Datasets
+
+| Path | Contents |
+|---|---|
+| `datasets/rag/corpus.jsonl` | 30 short internal documents of a **fictional** company, Kestrel Robotics |
+| `datasets/rag/questions.jsonl` | 40 questions with gold doc IDs and reference answers. Types: direct (26), paraphrase (8), multi-doc (4), distractor (2) |
+| `datasets/agent/tasks.jsonl` | 20 tool-use tasks. Types: single (7), paraphrase (4), multi-step (3), **no-tool** (6) |
+| `datasets/agent/tools.json` | Schemas for the 5 tools the tasks use |
+
+The company is fictional so that a model **cannot answer from what it learned in
+training**. It has to retrieve, which keeps retrieval and faithfulness scores meaningful.
+The corpus includes a superseded policy as a distractor.
+
+Known limitations, so the numbers below aren't over-read:
+
+- **Small.** With 40 and 20 cases, one case moves a mean by 2.5 to 5 points. Slice 8 adds
+  confidence intervals.
+- **Easy on direct questions.** BM25 gets all 26 direct questions right at rank 1. The
+  hard cases are the paraphrase and multi-doc ones, so read results **by question type**,
+  not just the overall mean.
+- On multi-doc questions (2 gold docs), `recall@1` can't exceed 0.5.
+- The labels were written by the maintainer and are not independently reviewed.
+
+## Baselines
+
+| System | What it does |
+|---|---|
+| `bm25` | Okapi BM25 (k1=1.5, b=0.75) over title + text; top 10 doc IDs returned, top 3 passed as context. The answer is the sentence from the top document that shares the most words with the question. Corpus from `$LLM_EVAL_CORPUS`, defaulting to `datasets/rag/corpus.jsonl`. |
+| `rules-agent` | Regular expressions mapping known phrasings to tool calls. No understanding, so it fails on paraphrases. |
+
+Results (deterministic, pinned in tests):
+
+| Baseline | Metric | Overall | By type |
+|---|---|---|---|
+| `bm25` | recall@1 | 0.863 | direct 1.00 · distractor 1.00 · paraphrase 0.62 · multi-doc 0.38 |
+| `bm25` | MRR | 0.929 | |
+| `bm25` | faithfulness (overlap) | 1.000 | extractive, so faithful by construction |
+| `rules-agent` | F1 (all modes) | 0.800 | fails exactly the 4 paraphrase tasks; 6/6 no-tool correct |
+
+**Faithful is not the same as correct.** For *"What is the flight time of the K-200?"*
+the BM25 baseline answers *"The K-200 is the Kestrel survey drone."* That sentence comes
+from the right document, so faithfulness is 1.0, but it doesn't answer the question.
+`expected_answer` is not scored yet.
 
 ## Metrics
 
