@@ -22,7 +22,7 @@ faithfulness, tool-call correctness, latency and cost per request.
 - [x] 3. Retrieval metrics (recall@k, precision@k, MRR, nDCG)
 - [x] 4. Latency and cost tracking (percentiles, token-based cost)
 - [x] 5. Tool-call correctness (name, arguments, sequence)
-- [ ] 6. Answer faithfulness (claim-level judge + human-agreement check)
+- [x] 6. Answer faithfulness (claim-level judge + human-agreement check)
 - [ ] 7. Sample datasets and a baseline system
 - [ ] 8. Report generator (tables, bootstrap CIs, failure examples)
 - [ ] 9. First public eval report with full methodology
@@ -33,8 +33,11 @@ faithfulness, tool-call correctness, latency and cost per request.
 llm-eval run --dataset examples/smoke.jsonl --system echo --out runs/demo
 # -> runs/demo/{manifest.json, results.jsonl}
 
-llm-eval score runs/demo --k 1 5 --pricing examples/pricing.example.toml
+llm-eval score runs/demo --k 1 5 --pricing examples/pricing.example.toml --judge overlap
 # -> prints a scorecard and writes runs/demo/scores.json
+
+llm-eval calibrate --judge overlap --labels examples/faithfulness_calibration.jsonl
+# -> agreement between the judge and human labels, plus every disagreement
 ```
 
 `--system` takes a builtin alias (`echo`) or any `package.module:ClassName` whose class
@@ -106,6 +109,48 @@ depends on leniency:
   (case, whitespace, units) is applied.
 - **Errored cases score 0** on every tool-call metric, even when no calls were expected.
   A crash is not a correct "no tool needed" decision.
+
+### Answer faithfulness
+
+How much of an answer is backed by the context the system retrieved. The answer is split
+into sentences ("claims"), a **judge** decides whether each claim is supported, and
+`faithfulness = supported claims / claims`.
+
+- Scored only with `--judge`, for RAG cases (those with `expected_doc_ids` or retrieved
+  contexts). An errored RAG case scores 0. A case that retrieved nothing is judged against
+  empty context.
+- An empty answer scores 1.0 by default (there are no claims to be wrong), so **mean
+  claims per answer** is shown next to the score.
+- Every claim's verdict and the judge's reasoning are saved in `scores.json`.
+- Faithfulness is not correctness: a claim can faithfully repeat a wrong document.
+
+Judges implement `name` and `judge_claim(claim, contexts) -> ClaimVerdict` and are
+loaded like systems (`--judge overlap` or `--judge module:Class`). The built-in
+`overlap` judge is deterministic and dependency-free. It is a **weak baseline**: every
+number in the claim must appear in the context, and at least 75% of its content words
+must.
+
+#### Calibrate the judge before trusting it
+
+`llm-eval calibrate` runs a judge over human-labelled claims and reports a confusion
+matrix, accuracy, **Cohen's kappa**, and recall on unsupported claims (the share of
+hallucinations caught). Accuracy alone can mislead: a judge that always says "supported"
+gets 80% on a set that is 80% supported, with kappa 0.
+
+Built-in `overlap` judge on `examples/faithfulness_calibration.jsonl` (n=24):
+
+| accuracy | Cohen's kappa | unsupported recall | unsupported precision |
+|---|---|---|---|
+| 0.583 | 0.172 | 0.636 | 0.538 |
+
+That is only slight agreement. Overlap misses paraphrases ("Danish" vs "Denmark"),
+swapped entities and roles ("Guido van Rossum was created by Python"), and some
+negations. It does catch changed numbers. Treat its scores as a smoke test, not a
+measurement. Any judge used in a published report must show its own calibration numbers
+next to its scores.
+
+> The labels in `examples/faithfulness_calibration.jsonl` are a **draft**. They must be
+> reviewed by a human before a published report relies on them.
 
 ### Latency
 

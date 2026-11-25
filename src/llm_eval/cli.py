@@ -10,7 +10,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from llm_eval import __version__
+from llm_eval.calibration import CalibrationError, CalibrationReport, calibrate, load_labels
 from llm_eval.dataset import DatasetError, file_sha256, load_jsonl
+from llm_eval.judges import BUILTIN_JUDGES, Judge, load_judge
 from llm_eval.metrics.tool_calls import MATCH_MODES, TOOL_CALL_METRICS
 from llm_eval.pricing import PriceTable, PricingError, load_pricing
 from llm_eval.runner import default_run_dir, run_eval, write_run
@@ -58,6 +60,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="TOML price table (see examples/pricing.example.toml); omit to skip cost",
     )
+    judge_help = (
+        f"faithfulness judge: builtin ({', '.join(sorted(BUILTIN_JUDGES))}) or module:Class"
+    )
+    score.add_argument("--judge", default=None, help=judge_help + "; omit to skip faithfulness")
+
+    cal = sub.add_parser("calibrate", help="measure a judge's agreement with human labels")
+    cal.add_argument("--judge", required=True, help=judge_help)
+    cal.add_argument("--labels", required=True, type=Path, help="JSONL of labelled claims")
+    cal.add_argument("--out", type=Path, default=None, help="write the report as JSON here")
     return parser
 
 
@@ -67,7 +78,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "run":
         return _cmd_run(args.dataset, args.system, args.out)
     if args.command == "score":
-        return _cmd_score(args.run_dir, args.dataset, args.k, args.pricing)
+        return _cmd_score(args.run_dir, args.dataset, args.k, args.pricing, args.judge)
+    if args.command == "calibrate":
+        return _cmd_calibrate(args.judge, args.labels, args.out)
     parser.print_help()
     return 0
 
@@ -99,7 +112,11 @@ def _cmd_run(dataset: Path, system_spec: str, out: Path | None) -> int:
 
 
 def _cmd_score(
-    run_dir: Path, dataset: Path | None, ks: list[int], pricing_path: Path | None
+    run_dir: Path,
+    dataset: Path | None,
+    ks: list[int],
+    pricing_path: Path | None,
+    judge_spec: str | None,
 ) -> int:
     if any(k < 1 for k in ks):
         print("error: --k values must be >= 1", file=sys.stderr)
@@ -123,9 +140,13 @@ def _cmd_score(
             return 2
         cases = load_jsonl(dataset)
         pricing: PriceTable | None = load_pricing(pricing_path) if pricing_path else None
-        card = score_run(cases, results, sorted(set(ks)), pricing=pricing)
+        judge: Judge | None = load_judge(judge_spec) if judge_spec else None
+        card = score_run(cases, results, sorted(set(ks)), pricing=pricing, judge=judge)
     except (OSError, DatasetError, RunFormatError, ScoringError, PricingError) as exc:
         print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except (ImportError, AttributeError, ValueError, TypeError) as exc:
+        print(f"error: could not load judge: {exc}", file=sys.stderr)
         return 2
 
     out = run_dir / "scores.json"
@@ -139,6 +160,7 @@ def _format_scorecard(card: Scorecard) -> str:
     sections = [
         _format_retrieval(card),
         _format_tool_calls(card),
+        _format_faithfulness(card),
         _format_latency(card),
         _format_cost(card),
     ]
@@ -172,6 +194,21 @@ def _format_tool_calls(card: Scorecard) -> str:
     return "\n".join(lines)
 
 
+def _format_faithfulness(card: Scorecard) -> str:
+    if card.judge is None:
+        return "faithfulness: skipped (pass --judge; calibrate it first)"
+    if not card.faithfulness:
+        return "faithfulness: no RAG cases (expected_doc_ids or retrieved contexts)"
+    faith, n_claims = card.faithfulness["faithfulness"], card.faithfulness["n_claims"]
+    return "\n".join(
+        [
+            f"faithfulness (judge={card.judge}, n={faith.n}, errored={faith.n_errored})",
+            f"  mean={faith.mean:.3f}  mean claims/answer={n_claims.mean:.1f}",
+            "  note: only as trustworthy as the judge's calibration (llm-eval calibrate)",
+        ]
+    )
+
+
 def _format_latency(card: Scorecard) -> str:
     lat = card.latency
     if lat is None:
@@ -200,6 +237,56 @@ def _format_cost(card: Scorecard) -> str:
     ]
     if cost.unpriced_models:
         lines.append(f"  models missing from price table: {', '.join(cost.unpriced_models)}")
+    return "\n".join(lines)
+
+
+def _cmd_calibrate(judge_spec: str, labels_path: Path, out: Path | None) -> int:
+    try:
+        labelled = load_labels(labels_path)
+    except (OSError, CalibrationError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    try:
+        judge = load_judge(judge_spec)
+    except (ImportError, AttributeError, ValueError, TypeError) as exc:
+        print(f"error: could not load judge: {exc}", file=sys.stderr)
+        return 2
+    report = calibrate(judge, labelled)
+    print(_format_calibration(report))
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(dataclasses.asdict(report), indent=2) + "\n", encoding="utf-8")
+        print(f"\nwrote {out}")
+    return 0
+
+
+def _fmt(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.3f}"
+
+
+def _format_calibration(r: CalibrationReport) -> str:
+    su, us = r.human_supported_judge_unsupported, r.human_unsupported_judge_supported
+    lines = [
+        f"calibration: judge={r.judge}  n={r.n}",
+        "",
+        f"  {'':<22}{'judge: sup':>12}{'judge: unsup':>14}",
+        f"  {'human: supported':<22}{r.both_supported:>12}{su:>14}",
+        f"  {'human: unsupported':<22}{us:>12}{r.both_unsupported:>14}",
+        "",
+        f"  accuracy             {r.accuracy:.3f}",
+        f"  cohen's kappa        {_fmt(r.cohens_kappa)}",
+        f"  unsupported recall   {_fmt(r.unsupported_recall)}  (hallucinations caught)",
+        f"  unsupported precision {_fmt(r.unsupported_precision)}",
+    ]
+    if r.disagreements:
+        lines += ["", f"disagreements ({len(r.disagreements)}):"]
+        for d in r.disagreements:
+            human = "supported" if d.human_supported else "unsupported"
+            lines.append(f"  [{d.id}] human={human}: {d.claim}")
+            if d.judge.rationale:
+                lines.append(f"      judge: {d.judge.rationale}")
+            if d.note:
+                lines.append(f"      note: {d.note}")
     return "\n".join(lines)
 
 

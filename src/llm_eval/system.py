@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import importlib
 from typing import Protocol, runtime_checkable
 
+from llm_eval.plugins import load_plugin
 from llm_eval.types import EvalCase, SystemResponse
 
 
@@ -32,16 +32,7 @@ def load_system(spec: str) -> System:
 
     The class must be constructible with no arguments.
     """
-    target = BUILTIN_SYSTEMS.get(spec, spec)
-    module_name, sep, attr = target.partition(":")
-    if not sep or not module_name or not attr:
-        raise ValueError(
-            f"invalid system spec {spec!r}: expected a builtin "
-            f"({', '.join(sorted(BUILTIN_SYSTEMS))}) or 'module:ClassName'"
-        )
-    module = importlib.import_module(module_name)
-    factory = getattr(module, attr)
-    instance = factory()
+    instance = load_plugin(spec, BUILTIN_SYSTEMS, "system")
     if not isinstance(instance, System):
-        raise TypeError(f"{target} does not implement the System protocol (name, run)")
+        raise TypeError(f"{spec} does not implement the System protocol (name, run)")
     return instance
